@@ -1,5 +1,294 @@
 import { useEffect, useState } from 'react'
 
+
+
+/* ==== EFECTOS (ADD-ON, NO ROMPE NADA) ==== */
+const EXTRA_STYLES = `
+/* reveal */
+.fx-reveal{opacity:0;transform:translateY(10px) scale(.985)}
+.fx-visible{opacity:1;transform:translateY(0) scale(1);transition:opacity .55s ease,transform .55s ease}
+
+/* tilt 3D con CSS vars */
+.promo-card[data-tilt="1"]{transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(-4px) scale(1.015)}
+
+/* destello diagonal */
+.card-shine{position:absolute;inset:0;background:linear-gradient(120deg,transparent 0%,rgba(255,255,255,.08) 35%,transparent 65%);transform:translateX(-110%);transition:transform .8s ease;pointer-events:none}
+.promo-card:hover .card-shine{transform:translateX(110%)}
+
+/* badge superior */
+.badge{align-self:flex-start;background:linear-gradient(90deg,#85C8FF,#7C8CFF);color:#00143a;font-weight:800;letter-spacing:.2px;padding:6px 10px;border-radius:999px;font-size:12px;box-shadow:0 6px 16px rgba(133,200,255,.35)}
+
+/* CTA con glow + ripple */
+.card-button{position:relative;overflow:hidden}
+.card-button.fx-cta{box-shadow:0 0 0 rgba(133,200,255,0);transition:box-shadow .25s ease}
+.card-button.fx-cta:hover{box-shadow:0 8px 26px rgba(133,200,255,.35)}
+.ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.35);transform:scale(0);animation:ripple .6s ease-out;pointer-events:none}
+@keyframes ripple{to{transform:scale(3);opacity:0}}
+
+/* confetti simple */
+.confetti-piece{position:fixed;width:8px;height:8px;border-radius:2px;opacity:1;animation:confetti-fall 1.1s ease-out forwards;z-index:9999;pointer-events:none}
+@keyframes confetti-fall{to{transform:translate(var(--tx),var(--ty)) rotate(var(--rz));opacity:0}}
+`;
+
+function injectExtraStyles(){
+  if(document.getElementById('fx-extra-css')) return;
+  const s=document.createElement('style');
+  s.id='fx-extra-css';
+  s.textContent=EXTRA_STYLES;
+  document.head.appendChild(s);
+}
+
+function addBadge(card, index){
+  if(card.querySelector('.badge')) return;
+  const b=document.createElement('span');
+  b.className='badge';
+  b.textContent = index===0 ? 'Recomendado' : 'Exclusivo'; // cambiá textos si querés
+  card.prepend(b);
+}
+
+function addShine(card){
+  if(card.querySelector('.card-shine')) return;
+  const shine=document.createElement('span');
+  shine.className='card-shine';
+  card.appendChild(shine);
+}
+
+function addReveal(card){
+  card.classList.add('fx-reveal');
+  const io=new IntersectionObserver(([e])=>{
+    if(e.isIntersecting){ card.classList.add('fx-visible'); io.disconnect(); }
+  },{threshold:.25});
+  io.observe(card);
+}
+
+function addTilt(card,max=7){
+  const onMove=(e)=>{
+    const r=card.getBoundingClientRect();
+    const x=e.clientX-r.left, y=e.clientY-r.top;
+    const rx=((y-r.height/2)/(r.height/2))*-max;
+    const ry=((x-r.width/2)/(r.width/2))* max;
+    card.style.setProperty('--rx',`${rx}deg`);
+    card.style.setProperty('--ry',`${ry}deg`);
+    card.setAttribute('data-tilt','1');
+  };
+  const onLeave=()=>{
+    card.style.setProperty('--rx','0deg');
+    card.style.setProperty('--ry','0deg');
+    card.removeAttribute('data-tilt');
+  };
+  card.addEventListener('mousemove', onMove);
+  card.addEventListener('mouseleave', onLeave);
+}
+
+function enhanceCTA(btn){
+  if(btn.dataset.fx) return;
+  btn.classList.add('fx-cta');
+  btn.addEventListener('click',(e)=>{
+    const rect=btn.getBoundingClientRect();
+    // ripple
+    const d=Math.max(rect.width,rect.height);
+    const circle=document.createElement('span');
+    circle.className='ripple';
+    circle.style.width=circle.style.height=`${d}px`;
+    circle.style.left=`${e.clientX-rect.left-d/2}px`;
+    circle.style.top =`${e.clientY-rect.top -d/2}px`;
+    btn.appendChild(circle);
+    setTimeout(()=>circle.remove(),600);
+    // confetti
+    const colors=['#85C8FF','#7C8CFF','#00E5FF','#00FFA3'];
+    const cx=rect.left+rect.width/2, cy=rect.top;
+    for(let i=0;i<16;i++){
+      const p=document.createElement('i');
+      p.className='confetti-piece';
+      p.style.left=(cx+(Math.random()*40-20))+'px';
+      p.style.top =(cy+(Math.random()*20-10))+'px';
+      p.style.setProperty('--tx',(Math.random()*120-60)+'px');
+      p.style.setProperty('--ty',(70+Math.random()*80)+'px');
+      p.style.setProperty('--rz',(Math.random()*360)+'deg');
+      p.style.background=colors[i%colors.length];
+      document.body.appendChild(p);
+      setTimeout(()=>p.remove(),1200);
+    }
+    if(navigator.vibrate) navigator.vibrate(10);
+  });
+  btn.dataset.fx='1';
+}
+
+function initPresentationEnhancers(){
+  injectExtraStyles();
+  const container=document.querySelector('.cards-container');
+  if(!container) return;
+  const apply=()=>{
+    const cards = container.querySelectorAll('.promo-card');
+    cards.forEach((card, i)=>{
+      if(card.dataset.fx) return;
+      addReveal(card);
+      addTilt(card,7);
+      addShine(card);
+      addBadge(card,i);
+      card.querySelectorAll('.card-button').forEach(enhanceCTA);
+      card.dataset.fx='1';
+    });
+  };
+  // aplicar a lo ya renderizado
+  apply();
+  // si React re-renderiza, volvemos a aplicar solo a nuevos nodos
+  const mo=new MutationObserver(apply);
+  mo.observe(container,{childList:true,subtree:true});
+}
+
+// === JS — AGREGAR DEBAJO DE TUS IMPORTS (no reemplaza nada) ===
+function initOfferEffects() {
+  // Fondo con parallax suave (si existe el fondo)
+  const bg = document.querySelector('.animated-background');
+  if (bg && !bg.dataset.enhanced) {
+    const onMove = (e) => {
+      const { innerWidth:w, innerHeight:h } = window;
+      const x = (e.clientX / w - 0.5) * 10;
+      const y = (e.clientY / h - 0.5) * 10;
+      bg.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    };
+    window.addEventListener('mousemove', onMove);
+    bg.dataset.enhanced = '1';
+  }
+
+  // Cards: reveal + tilt + shine + ripple/confetti en CTA
+  const cards = document.querySelectorAll('.promo-card');
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) {
+        e.target.classList.add('is-visible');
+        io.unobserve(e.target);
+      }
+    }
+  }, { threshold: 0.25 });
+
+  cards.forEach((card) => {
+    if (card.dataset.enhanced) return;
+    card.classList.add('reveal');
+    io.observe(card);
+
+    // Shine overlay si no existe
+    if (!card.querySelector('.card-shine')) {
+      const shine = document.createElement('span');
+      shine.className = 'card-shine';
+      card.appendChild(shine);
+    }
+
+    // Tilt
+    const onMouseMove = (e) => {
+      const r = card.getBoundingClientRect();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      const rx = ((y - r.height/2) / (r.height/2)) * -7;
+      const ry = ((x - r.width/2)  / (r.width/2))  *  7;
+      card.style.setProperty('--rx', `${rx}deg`);
+      card.style.setProperty('--ry', `${ry}deg`);
+      card.setAttribute('data-tilt', '1');
+    };
+    const onLeave = () => {
+      card.style.setProperty('--rx', `0deg`);
+      card.style.setProperty('--ry', `0deg`);
+      card.removeAttribute('data-tilt');
+    };
+    card.addEventListener('mousemove', onMouseMove);
+    card.addEventListener('mouseleave', onLeave);
+
+    // Botón CTA: ripple + confetti
+    card.querySelectorAll('.card-button').forEach((btn) => {
+      if (btn.dataset.enhanced) return;
+      btn.style.position = 'relative';
+      btn.style.overflow = 'hidden';
+      btn.addEventListener('click', (e) => {
+        // ripple
+        const rect = btn.getBoundingClientRect();
+        const d = Math.max(rect.width, rect.height);
+        const circle = document.createElement('span');
+        circle.className = 'ripple';
+        circle.style.width = circle.style.height = `${d}px`;
+        circle.style.left = `${e.clientX - rect.left - d/2}px`;
+        circle.style.top  = `${e.clientY - rect.top  - d/2}px`;
+        btn.appendChild(circle);
+        setTimeout(() => circle.remove(), 600);
+
+        // confetti
+        const colors = ['#85C8FF','#7C8CFF','#00E5FF','#00FFA3'];
+        const cx = rect.left + rect.width/2, cy = rect.top;
+        for (let i = 0; i < 16; i++) {
+          const p = document.createElement('i');
+          p.className = 'confetti-piece';
+          p.style.left = (cx + (Math.random()*40-20)) + 'px';
+          p.style.top  = (cy + (Math.random()*20-10)) + 'px';
+          p.style.setProperty('--tx', (Math.random()*120-60)+'px');
+          p.style.setProperty('--ty', (70 + Math.random()*80)+'px');
+          p.style.setProperty('--rz', (Math.random()*360)+'deg');
+          p.style.background = colors[i % colors.length];
+          document.body.appendChild(p);
+          setTimeout(() => p.remove(), 1200);
+        }
+        // vibración suave si está disponible
+        if (navigator.vibrate) navigator.vibrate(10);
+      });
+      btn.dataset.enhanced = '1';
+    });
+
+    card.dataset.enhanced = '1';
+  });
+}
+
+
+/* === NUEVO: copy limpio por producto (sin datos sensibles) === */
+/*const copyByProducto = (producto = '') => {
+  const p = String(producto).toLowerCase();
+
+  if (p.includes('black')) {
+    return {
+      titulo: 'Viví la experiencia Black',
+      cuerpo: 'Acceso a salas VIP, upgrades en hoteles y asistencia 24/7 para viajes sin fricción.',
+      cta: 'Solicitar ahora',
+    };
+  }
+  if (p.includes('platinum')) {
+    return {
+      titulo: 'Potenciá tus compras Platinum',
+      cuerpo: 'Beneficios en comercios seleccionados, atención preferencial y cuotas flexibles.',
+      cta: 'Conocer beneficios',
+    };
+  }
+  if (p.includes('gold')) {
+    return {
+      titulo: 'Beneficios Gold a tu medida',
+      cuerpo: 'Bonificaciones, cuotas y ventajas en tu día a día.',
+      cta: 'Quiero mi tarjeta',
+    };
+  }
+  // Genérico por defecto
+  return {
+    titulo: `Beneficios ${producto || 'Premium'}`,
+    cuerpo: 'Cuotas, bonificaciones y atención prioritaria para aprovechar al máximo tu producto.',
+    cta: 'Ver detalles',
+  };
+};*/
+
+/* === NUEVO: mapeos de ofertas con el MISMO shape === */
+/*const mapOffer1 = (data) => ({
+  titulo: data?.mensaje_final?.titulo ?? 'Experimentá un nuevo nivel de exclusividad',
+  cuerpo: data?.mensaje_final?.cuerpo ?? 'Acceso a salas VIP, upgrades y concierge personal.',
+  cta:    data?.mensaje_final?.cta    ?? 'Descubrir beneficios',
+});*/
+
+const mapOffer2 = (data) => {
+  const producto = data?.estrategia?.producto_sugerido_codigo ?? 'Producto Premium';
+  // NO usamos resumen_cliente ni motivo; solo copy curado por producto
+  return copyByProducto(producto);
+};
+
+const normalizeOferta = (data) => ({
+  ofertas_generadas: [mapOffer1(data), mapOffer2(data)],
+});
+/* === FIN NUEVO === */
+
+
+
 const styles = `
     @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Roboto:wght@400;500;700&display=swap');
 
@@ -52,42 +341,21 @@ const styles = `
     }
 
     @keyframes gradientShift {
-        0% {
-            background-position: 0% 50%;
-        }
-        50% {
-            background-position: 100% 50%;
-        }
-        100% {
-            background-position: 0% 50%;
-        }
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
     }
-
     @keyframes floatingOrbs {
-        0%, 100% {
-            transform: translate(0px, 0px) scale(1) rotate(0deg);
-        }
-        25% {
-            transform: translate(30px, -30px) scale(1.1) rotate(90deg);
-        }
-        50% {
-            transform: translate(-20px, 20px) scale(0.9) rotate(180deg);
-        }
-        75% {
-            transform: translate(40px, 10px) scale(1.05) rotate(270deg);
-        }
+        0%, 100% { transform: translate(0px, 0px) scale(1) rotate(0deg); }
+        25%      { transform: translate(30px, -30px) scale(1.1) rotate(90deg); }
+        50%      { transform: translate(-20px, 20px) scale(0.9) rotate(180deg); }
+        75%      { transform: translate(40px, 10px) scale(1.05) rotate(270deg); }
     }
 
     /* Animación de entrada para las tarjetas */
     @keyframes fadeIn {
-        from {
-            opacity: 0;
-            transform: translateY(20px) scale(0.98);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
+        from { opacity: 0; transform: translateY(20px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0)      scale(1); }
     }
 
     /* Contenedor principal */
@@ -177,52 +445,19 @@ const styles = `
     .card-title {
         font-family: 'DM Serif Display', serif;
         font-size: 24px;
-        margin: 0;
+        margin: 0 0 10px 0;
         line-height: 1.25;
-        margin-bottom: 10px;
     }
-
-    .promo-card--dark .card-title {
-        color: #FFFFFF;
-        text-shadow: 0 0 10px rgba(139, 225, 233, 0.3);
-    }
+    .promo-card--dark .card-title { color: #FFFFFF; text-shadow: 0 0 10px rgba(139, 225, 233, 0.3); }
 
     /* Descripción de la tarjeta */
     .card-description {
         font-size: 15px;
         line-height: 1.6;
-        margin: 0;
-        margin-bottom: 15px;
+        margin: 0 0 15px 0;
     }
-
-    .promo-card--light .card-description {
-        color: #46526D;
-    }
-
-    .promo-card--dark .card-description {
-        color: #CAD1D8;
-    }
-
-    /* Información adicional */
-    .card-info {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        margin-bottom: 20px;
-    }
-
-    .card-info-item {
-        font-size: 13px;
-        font-weight: 500;
-    }
-
-    .promo-card--light .card-info-item {
-        color: #46526D;
-    }
-
-    .promo-card--dark .card-info-item {
-        color: #85C8FF;
-    }
+    .promo-card--light .card-description { color: #46526D; }
+    .promo-card--dark  .card-description { color: #CAD1D8; }
 
     /* Botón de acción */
     .card-button {
@@ -238,28 +473,10 @@ const styles = `
         letter-spacing: 0.5px;
         margin-top: auto;
     }
-
-    .promo-card--light .card-button {
-        border-color: #001391;
-        color: #001391;
-    }
-
-    .promo-card--light .card-button:hover {
-        background: #001391;
-        color: #FFFFFF;
-        transform: translateY(-2px);
-    }
-
-    .promo-card--dark .card-button {
-        border-color: #85C8FF;
-        color: #85C8FF;
-    }
-
-    .promo-card--dark .card-button:hover {
-        background: #85C8FF;
-        color: #001391;
-        transform: translateY(-2px);
-    }
+    .promo-card--light .card-button { border-color: #001391; color: #001391; }
+    .promo-card--light .card-button:hover { background: #001391; color: #FFFFFF; transform: translateY(-2px); }
+    .promo-card--dark .card-button  { border-color: #85C8FF; color: #85C8FF; }
+    .promo-card--dark .card-button:hover { background: #85C8FF; color: #001391; transform: translateY(-2px); }
 
     /* Mensaje de carga */
     .loading-message {
@@ -276,112 +493,120 @@ const styles = `
         animation: pulse 2s ease-in-out infinite;
         text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     }
-
     @keyframes pulse {
-        0%, 100% {
-            transform: scale(1);
-            opacity: 1;
-        }
-        50% {
-            transform: scale(1.05);
-            opacity: 0.8;
-        }
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50%      { transform: scale(1.05); opacity: 0.8; }
     }
 
     /* Adaptación para dispositivos móviles */
     @media (max-width: 768px) {
-        .cards-container {
-            flex-direction: column;
-            padding: 16px;
-            gap: 20px;
-        }
-        .card-title {
-            font-size: 20px;
-        }
-        .oferta-title {
-            font-size: 24px;
-        }
+        .cards-container { flex-direction: column; padding: 16px; gap: 20px; }
+        .card-title { font-size: 20px; }
+        .oferta-title { font-size: 24px; }
     }
+
+
+// Inicializa los efectos cuando haya contenido
+useEffect(() => { initPresentationEnhancers(); }, []);
+//useEffect(() => { initPresentationEnhancers(); }, [oferta, loading]);
+
+// cuando ya cargó/actualizó contenido
+useEffect(() => {
+  animateTitleSurprise();
+  revealDescriptions();
+}, [oferta, loading]);
+
+
 `;
 
-// Componente para cada tarjeta de oferta
+// Componente para cada tarjeta de oferta (sin Motivo ni Confianza)
 const OfertaCard = ({ oferta, index }) => {
-    const theme = 'dark'; // Forzar tema oscuro
-    const cardClass = `promo-card promo-card--${theme}`;
+  const theme = 'dark'; // mantenemos oscuro como en tu original
+  const cardClass = `promo-card promo-card--${theme}`;
 
-    return (
-        <div className={cardClass} style={{ animationDelay: `${index * 0.2}s` }}>
-            <h2 className="card-title">{oferta.titulo}</h2>
-            <p className="card-description">{oferta.cuerpo}</p>
-            
-            <div className="card-info">
-                <div className="card-info-item">
-                    <strong>Motivo:</strong> {oferta.motivo_interno}
-                </div>
-                <div className="card-info-item">
-                    <strong>Confianza:</strong> {oferta.score_confianza}/10
-                </div>
-            </div>
-
-            <button className="card-button">
-                {oferta.cta}
-            </button>
-        </div>
-    );
+  return (
+    <div className={cardClass} style={{ animationDelay: `${index * 0.2}s` }}>
+      <h2 className="card-title">{oferta.titulo}</h2>
+      <p className="card-description">{oferta.cuerpo}</p>
+      <button className="card-button">{oferta.cta}</button>
+    </div>
+  );
 };
 
 export default function Oferta() {
-    const [oferta, setOferta] = useState(null)
-    const [loading, setLoading] = useState(true)
-    const dni = sessionStorage.getItem('dni')
+  const [oferta, setOferta] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const dni = sessionStorage.getItem('dni');
 
-    useEffect(() => {
-        if (dni) {
-            fetch(`/api/oferta/${dni}`)
-                .then(res => res.json())
-                .then(data => {
-                    setOferta(data)
-                    setLoading(false)
-                })
-                .catch(err => {
-                    console.error(err)
-                    setLoading(false)
-                })
-        }
-    }, [dni])
+  useEffect(() => {
+    if (!dni) { setLoading(false); return; }
 
-    return (
-        <div>
-            <style>{styles}</style>
-            
-            {/* Fondo animado que aparece solo durante la carga */}
-            {loading && <div className="animated-background"></div>}
-            
-            <div className="oferta-container">
-                <h1 className="oferta-title">
-                    Ofertas personalizadas para DNI: {dni}
-                </h1>
-                
-                {loading ? (
-                    <div className="loading-message">
-                        Cargando ofertas personalizadas...
-                    </div>
-                ) : oferta ? (
-                    <div className="cards-container">
-                        {oferta.ofertas_generadas.map((of, index) => (
-                            <OfertaCard 
-                                key={index} 
-                                oferta={of} 
-                                index={index}
-                            />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="loading-message">
-                        Error al cargar las ofertas
-                    </div>
-                )}
-            </div>
-        </div>
-    )
+    fetch(`/api/oferta/${dni}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        console.log('Datos recibidos del backend:', data);
+        // Creamos DOS ofertas a partir del JSON del backend
+        //const primera = {
+        //  titulo: data?.mensaje_final?.titulo ?? '—',
+        //  cuerpo: data?.mensaje_final?.cuerpo ?? '—',
+        //  cta:    data?.mensaje_final?.cta    ?? 'Ver más',
+        //};
+
+        //const segunda = {
+        // usamos el producto sugerido y el resumen del cliente
+        //  titulo: data?.estrategia?.producto_sugerido_codigo ?? 'Producto sugerido',
+        //  cuerpo: data?.estrategia?.resumen_cliente ?? '—',
+        //  cta:    data?.mensaje_final?.cta ?? 'Conocer beneficios',
+        //};
+        //const tercera = {
+        // usamos el producto sugerido y el resumen del cliente
+        //  titulo: data?.estrategia?.producto_sugerido_codigo ?? 'Producto sugerido',
+        //  cuerpo: data?.estrategia?.resumen_cliente ?? '—',
+        //  cta:    data?.mensaje_final?.cta ?? 'Conocer beneficios',
+        //};
+        //setOferta({ ofertas_generadas: [primera, segunda] });
+        // Tomar solo mensaje_final de cada oferta
+        const ofertas_generadas = Array.isArray(data)
+          ? data.map(oferta => oferta.mensaje_final)
+          : [];
+        setOferta({ ofertas_generadas });
+        //setOferta(normalizeOferta(data))
+      })
+      .catch(err => {
+        console.error(err);
+        setOferta(null);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div>
+      <style>{styles}</style>
+
+      {loading && <div className="animated-background"></div>}
+
+      <div className="oferta-container">
+        <h1 className="oferta-title">Ofertas personalizadas para DNI: {dni}</h1>
+
+        {loading ? (
+          <div className="loading-message">Cargando ofertas personalizadas...</div>
+        ) : oferta ? (
+          <div className="cards-container">
+            {oferta.ofertas_generadas.slice(0, 3).map((of, index) => (
+              <OfertaCard key={index} oferta={of} index={index} />
+            ))}
+          </div>
+        ) : (
+          <div className="loading-message">Error al cargar las ofertas</div>
+        )}
+      </div>
+
+      
+    </div>
+
+    
+  );
 }
