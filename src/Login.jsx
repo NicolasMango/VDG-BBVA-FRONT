@@ -23,7 +23,14 @@ export default function Login() {
 
   const handleLogin = () => {
     sessionStorage.setItem('dni', dni)
-    navigate('/oferta')
+    if (dni === '33877614') {
+      navigate('/oferta-bebe')
+    } else if (dni === '33877615') {
+      navigate('/oferta-hipotecario')
+    } else {
+      // Puedes agregar un mensaje de error o redirigir a otra página
+      navigate('/oferta')
+    }
   }
 
   return (
