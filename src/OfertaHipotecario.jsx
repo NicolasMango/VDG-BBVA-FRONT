@@ -9,7 +9,7 @@ const scenario = {
         cta: "Hacerlo realidad",
     },
     step2: {
-        h1: "Estás a un clic de empezar.",
+        h1: "Estás a un clic de empezar. ",
         p: "Confirmá la solicitud y comenzá a planificar. El dinero se acreditará en tu cuenta en las próximas 24hs hábiles para que no esperes más.",
         cta: "Sí, quiero mi préstamo",
         subtext: "Acreditación inmediata"
